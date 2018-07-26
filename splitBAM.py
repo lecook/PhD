@@ -1,4 +1,4 @@
-!usr/bin/env python3
+#!usr/bin/env python3
 
 # This is the final script I used to split the BAM files into smaller chunks for analyses
 # This python script allows you to take a BAM file and split it into X chunks (chunks) where each chunk is a separate SAM file
