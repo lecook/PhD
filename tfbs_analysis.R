@@ -11,7 +11,6 @@ library(GenomicRanges)
 library(stringr)
 library(tidyverse)
 
-
 # Set working directory
 setwd("~/phd/OneDrive - The University of Melbourne/tfbs_project/results/meme/")
 
@@ -19,26 +18,32 @@ setwd("~/phd/OneDrive - The University of Melbourne/tfbs_project/results/meme/")
 m <- read.table("all_CFmotifs_HOCOMOCO_core_80%_overlap_0.001.tsv", header=TRUE, sep="")
 
 
-
 ###### ------------------------------- FINDING UNIQUE MATCHES BASED ON INTERVALS ----------------------------------- ######
 
-## Try and do this for every TWAR
 
+# Create an empty list for twars
+twar.list <- list()
+
+# Loop over every unique twar ID 
 for(twar in unique(m$sequence_name)){
-	twar <- subset(m, sequence_name=="chr1")
 
+# Generate a list with the twar IDs
+list.name2 <- as.character(twar)
 
-	# Create an empty list
-	my.list <- list()
+	# Extract the data for that particular TWAR
+	twar_subset <- subset(m, sequence_name==twar)
+
+	# Create an empty list for the TF ids
+	tf.list <- list()
 
 	# Loop over every unique TF id within the list of matches for this TWAR
-	for(tf in unique(twar$motif_id)){
+	for(tf in unique(twar_subset$motif_id)){
 
-	# Generate a list of the tf names
+	# Append the list with all the TF names
 	list.name <- as.character(tf)
 
 		# Convert dataframe into a GRanges object to find overlaps and unique sites to compare
-		GR <- makeGRangesFromDataFrame(subset(twar, motif_id==tf), keep.extra.columns=TRUE, seqnames.field="sequence_name", start.field="start", end.field="stop", strand.field="strand")
+		GR <- makeGRangesFromDataFrame(subset(twar_subset, motif_id==tf), keep.extra.columns=TRUE, seqnames.field="sequence_name", start.field="start", end.field="stop", strand.field="strand")
 		
 		# Extract the interval data according to the metadata "species"
 		ailMel1 <- GR[which(elementMetadata(GR)[, "species"] %in% "ailMel1")]
@@ -50,13 +55,19 @@ for(twar in unique(m$sequence_name)){
 		# Extract the unique matches for each species
 		# Can't work out a way to do this in one go so have to look at thylacine no devil, thylacine no panda and thylacine no wolf and then overlap those lists
 		# subsetByOverlaps() looks for the overlapping sequences between two GRanges objects, invert=TRUE means that it does the opposite and outputs the sequence found in thylacine but not in devil
-		# I've ignored strand (-/+) in this because it kept mucking up and I don't know that I'm necessarily interested in strand?? Check with Irene about this.
+		# Ended up using %over% but this doesn't ignore strand so I might have to go back to subsetByOverlaps
+		# Should I exclude strand in determining the overlap? Because The matched sequence can be exactly the same but they don't come up as matched because they're
+			# on different strands
 
 
 		## Unique to thylacine
-		thylacine_not_devil <- subsetByOverlaps(tcyn, sarHar1, invert=TRUE, ignore.strand=TRUE)
-		thylacine_not_panda <- subsetByOverlaps(tcyn, ailMel1, invert=TRUE, ignore.strand=TRUE)
-		thylacine_not_wolf <- subsetByOverlaps(tcyn, clup, invert=TRUE, ignore.strand=TRUE)
+		thylacine_not_devil <- tcyn[!tcyn %over% sarHar1]
+
+		### In thylacine, not in panda
+		thylacine_not_panda <- tcyn[!tcyn %over% ailMel1]
+
+		### In thylacine, not in wolf
+		thylacine_not_wolf <- tcyn[!tcyn %over% clup]
 
 		# Overlap the list above to find those matches unique to thylacine
 		uT <- as(Reduce(subsetByOverlaps, list(thylacine_not_wolf, thylacine_not_panda, thylacine_not_devil)), "data.frame")
@@ -69,27 +80,27 @@ for(twar in unique(m$sequence_name)){
 		}	
 
 		## Unique to wolf
-		wolf_not_devil <- subsetByOverlaps(clup, sarHar1, invert=TRUE, ignore.strand=TRUE)
-		wolf_not_panda <- subsetByOverlaps(clup, ailMel1, invert=TRUE, ignore.strand=TRUE)
-		wolf_not_thylacine <- subsetByOverlaps(clup, tcyn, invert=TRUE, ignore.strand=TRUE)
+		wolf_not_devil <- clup[!clup %over% sarHar1]
+		wolf_not_panda <- clup[!clup %over% ailMel1]
+		wolf_not_thylacine <- clup[!clup %over% tcyn]
 		uW <- as(Reduce(subsetByOverlaps, list(wolf_not_thylacine, wolf_not_panda, wolf_not_devil)), "data.frame")
 		if(nrow(uW)>0){
 			uW$unique <- "wolf"
 		}	
 
 		## Unique to panda
-		panda_not_devil <- subsetByOverlaps(ailMel1, sarHar1, invert=TRUE, ignore.strand=TRUE)
-		panda_not_thylacine <- subsetByOverlaps(ailMel1, tcyn, invert=TRUE, ignore.strand=TRUE)
-		panda_not_wolf <- subsetByOverlaps(ailMel1, clup, invert=TRUE, ignore.strand=TRUE)
+		panda_not_devil <- ailMel1[!ailMel1 %over% sarHar1]
+		panda_not_thylacine <- ailMel1[!ailMel1 %over% tcyn]
+		panda_not_wolf <- ailMel1[!ailMel1 %over% clup]
 		uP <- as(Reduce(subsetByOverlaps, list(panda_not_wolf, panda_not_thylacine, panda_not_devil)), "data.frame")
 		if(nrow(uP)>0){
 			uP$unique <- "panda"
 		}	
 
 		## Unique to devil
-		devil_not_thylacine <- subsetByOverlaps(sarHar1, tcyn, invert=TRUE, ignore.strand=TRUE)
-		devil_not_panda <- subsetByOverlaps(sarHar1, ailMel1, invert=TRUE, ignore.strand=TRUE)
-		devil_not_wolf <- subsetByOverlaps(sarHar1, clup, invert=TRUE, ignore.strand=TRUE)
+		devil_not_thylacine <- sarHar1[!sarHar1 %over% tcyn]
+		devil_not_panda <- sarHar1[!sarHar1 %over% ailMel1]
+		devil_not_wolf <- sarHar1[!sarHar1 %over% clup]
 		uD <- as(Reduce(subsetByOverlaps, list(devil_not_wolf, devil_not_panda, devil_not_thylacine)), "data.frame")
 		if(nrow(uD)>0){
 			uD$unique <- "devil"
@@ -133,6 +144,29 @@ for(twar in unique(m$sequence_name)){
 			uPD$unique <- "panda_devil"
 		}
 
+		## Unique to thylacine, wolf and devil
+		uTWD <-as(Reduce(subsetByOverlaps, list(thylacine_not_panda, sarHar1, clup)), "data.frame")
+		if(nrow(uTWD)>0){
+			uTWD$unique <- "thylacine_wolf_devil"
+		}
+
+		## Unique to thylacine, wolf and panda
+		uTWP <-as(Reduce(subsetByOverlaps, list(thylacine_not_devil, ailMel1, clup)), "data.frame")
+		if(nrow(uTWP)>0){
+			uTWP$unique <- "thylacine_wolf_panda"
+		}
+
+		## Unique to wolf, panda and devil
+		uWPD <-as(Reduce(subsetByOverlaps, list(wolf_not_thylacine, ailMel1, sarHar1)), "data.frame")
+		if(nrow(uWPD)>0){
+			uWPD$unique <- "wolf_panda_devil"
+		}
+
+		## Unique to thylacine, devil and panda
+		uTDP <-as(Reduce(subsetByOverlaps, list(thylacine_not_wolf, ailMel1, sarHar1)), "data.frame")
+		if(nrow(uTDP)>0){
+			uTDP$unique <- "thylacine_devil_panda"
+		}
 
 		## Match is present in all four species
 		uTWPD <- as(Reduce(subsetByOverlaps, list(tcyn, ailMel1, sarHar1, clup)), "data.frame")
@@ -141,22 +175,35 @@ for(twar in unique(m$sequence_name)){
 		}
 
 		# For each TF bind all the combinations into 1 dataframe
-		df_temp <- rbind(uT, uW, uD, uP, uTW, uTP, uTD, uWP, uWD, uPD, uTWPD)
+		df_temp <- rbind(uT, uW, uD, uP, uTW, uTP, uTD, uWP, uWD, uPD, uTWD, uTWP, uWPD, uTDP, uTWPD)
 		
 		# Add the TF that the loop is on to the dataframe so I know which TF this data is for
 		if(nrow(df_temp)>0){
 			df_temp$TF <- tf
 		}
 
-
 			# For each TF in my list add the information from the dataframe (dt_temp) 
-			my.list[[list.name]] <- df_temp
-
+			tf.list[[list.name]] <- df_temp
 	}
 
 	# Combine all the data for every TF in the list
-	final.data <- do.call(rbind, my.list)
-	write.table(final.data, file="final_data.txt")
+	final.data <- do.call(rbind, tf.list)
+
+twar.list[[list.name2]] <- final.data
+
+} 
+
+data <- do.call(rbind, twar.list)
+write.table(data, file="unique_matches.txt")
+
+
+
+
+
+
+
+
+
 
 
 	### Need to work out a way to keep both regions that overlap
@@ -188,6 +235,10 @@ for(twar in unique(m$sequence_name)){
 		uTD_count <- sum(str_count(tf_subset$unique, "\\bthylacine_devil\\b"))
 		uWD_count <- sum(str_count(tf_subset$unique, "\\bwolf_devil\\b"))
 		uPD_count <- sum(str_count(tf_subset$unique, "\\bpanda_devil\\b"))
+		uTWD_count <- sum(str_count(tf_subset$unique, "\\bthylacine_wolf_devil\\b"))
+		uTWP_count <- sum(str_count(tf_subset$unique, "\\bthylacine_wolf_panda\\b"))
+		uWPD_count <- sum(str_count(tf_subset$unique, "\\bwolf_panda_devil\\b"))
+		uTDP_count <- sum(str_count(tf_subset$unique, "\\bthylacine_devil_panda\\b"))
 		uTWPD_count <- sum(str_count(tf_subset$unique, "\\bthylacine_wolf_panda_devil\\b"))
 
 		# Count all occurances from original dataset
@@ -198,14 +249,14 @@ for(twar in unique(m$sequence_name)){
 
 
 		# Save these into a new df
-		df_count <- data.frame(T, W, P, D, uT_count, uW_count, uD_count, uP_count, uTW_count, uTP_count, uTD_count, uWD_count, uPD_count, uTWPD_count)
+		df_count <- data.frame(T, W, P, D, uT_count, uW_count, uD_count, uP_count, uTW_count, uTP_count, uTD_count, uWD_count, uPD_count, uTWD_count, uTWP_count, uWPD_count, uTDP_count, uTWPD_count)
 			my.list2[[list.name2]] <- df_count
 	}
 
 
 	# Combine all the count data for every TF in the list
 	count.data <- do.call(rbind, my.list2)
-	write.table(count.data, file="count_data.txt")
+#	write.table(count.data, file="count_data.txt")
 
 
 ## DONE! For now.. urghh
